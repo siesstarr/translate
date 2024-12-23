@@ -5,13 +5,11 @@ from openpyxl import load_workbook
 import argparse
 import sqlite3
 import os
-from langdetect import detect, DetectorFactory, LangDetectException
 import re
 import unicodedata
 from dotenv import load_dotenv
 
 load_dotenv()
-DetectorFactory.seed = 0
 
 # 百度翻译配置
 APP_ID = os.getenv("BAIDU_APP_ID")
@@ -96,61 +94,11 @@ def is_number(s):
     return False
 
 
-# 如果不包含源语言,则不翻译
-def is_need_translate(text, from_lang):
-    lang_map = {
-        "af": "auto",
-        "ar": "ara",
-        "bg": "bul",
-        "cs": "cs",
-        "da": "dan",
-        "de": "de",
-        "el": "el",
-        "en": "en",
-        "es": "spa",
-        "et": "est",
-        "fa": "fa",
-        "fi": "fin",
-        "fr": "fra",
-        "hi": "hi",
-        "hr": "hr",
-        "hu": "hu",
-        "id": "id",
-        "it": "it",
-        "ja": "jp",
-        "ko": "kor",
-        "lt": "lt",
-        "lv": "lv",
-        "pl": "pl",
-        "pt": "pt",
-        "ro": "rom",
-        "ru": "ru",
-        "sl": "slo",
-        "sv": "swe",
-        "sw": "sw",
-        "ta": "ta",
-        "th": "th",
-        "tr": "tr",
-        "uk": "uk",
-        "ur": "ur",
-        "vi": "vie",
-        "zh-cn": "zh",
-        "zh-tw": "cht",
-    }
-    try:
-        language = detect(text)
-    except LangDetectException:
-        return False
-    if language not in lang_map:
-        return False
-    return lang_map[language] == from_lang
-
-
 # 如果是公式则不翻译
 def is_formula(text):
     try:
         # 匹配常见公式符号的正则表达式
-        formula_pattern = r"[=]"
+        formula_pattern = r"^[=]"
         return bool(re.search(formula_pattern, text))
     except (TypeError, ValueError):
         return False
@@ -206,7 +154,6 @@ def write_to_local_db(conn, key, to_lang, value):
 
 
 def to_translate(key, from_lang, to_lang, conn):
-    # if is_need_translate(key, from_lang):
     value = get_from_local_db(conn, key, to_lang)
     if value is None:
         value = baidu_translate(key, from_lang, to_lang)
@@ -220,9 +167,8 @@ def to_translate(key, from_lang, to_lang, conn):
     return value
 
 
-def start_translate(in_dir, out_dir, file_name, from_lang, to_lang, conn):
+def translate_excel(out_dir, file_path, file_name, from_lang, to_lang, conn):
     # 打开 Excel 文件
-    file_path = os.path.join(in_dir, file_name)
     workbook = load_workbook(file_path)
     print(f"正在翻译Excel: {file_name}")
 
@@ -257,7 +203,23 @@ def start_translate(in_dir, out_dir, file_name, from_lang, to_lang, conn):
     out_file_name = f'{to_lang}_{file_name}'
     out_file_path = os.path.join(out_dir, out_file_name)
     workbook.save(out_file_path)
-    print("翻译完成")
+
+
+def is_excel_file(file_path):
+    return file_path.lower().endswith(('.xls', '.xlsx'))
+
+
+def start_translate(in_dir, out_dir, file_name, from_lang, to_lang, conn):
+    file_path = os.path.join(in_dir, file_name)
+    _, ext = os.path.splitext(file_path)
+    ext = ext.lower()
+
+    if is_excel_file(file_name):
+        translate_excel(
+            out_dir, file_path, file_name, from_lang, to_lang, conn
+        )
+    else:
+        print(f'文件类型错误: {file_name}')
 
 
 # 初始化 SQLite 数据库
@@ -283,10 +245,6 @@ def init_db():
     return conn
 
 
-def is_excel_file(file_path):
-    return file_path.lower().endswith(('.xls', '.xlsx'))
-
-
 def main(args):
     # 判断输入的参数是否正确
     if not os.path.exists(args.in_dir):
@@ -309,15 +267,15 @@ def main(args):
         files = [entry.name for entry in entries if entry.is_file()]
 
     for file_name in files:
-        if is_excel_file(file_name):
-            start_translate(
-                args.in_dir,
-                args.out_dir,
-                file_name,
-                args.from_lang,
-                args.to_lang,
-                conn,
-            )
+        start_translate(
+            args.in_dir,
+            args.out_dir,
+            file_name,
+            args.from_lang,
+            args.to_lang,
+            conn,
+        )
+    print("翻译完成")
 
 
 '''
