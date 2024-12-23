@@ -159,20 +159,26 @@ def is_formula(text):
 # 调用百度翻译
 def baidu_translate(text, from_lang, to_lang):
     salt = str(random.randint(327681365, 655368412))
-    sign = hashlib.md5(
-        (APP_ID + text + salt + APP_KEY).encode('utf-8')
-    ).hexdigest()
-    params = {
-        'q': text,
-        'from': from_lang,
-        'to': to_lang,
-        'appid': APP_ID,
-        'salt': salt,
-        'sign': sign,
-    }
-    response = requests.get(TRANSLATE_API, params=params).json()
-    result = response.get('trans_result', [{}])[0].get('dst', text)
-    return result
+
+    def translate_line(line):
+        sign = hashlib.md5(
+            (APP_ID + line + salt + APP_KEY).encode('utf-8')
+        ).hexdigest()
+        params = {
+            'q': line,
+            'from': from_lang,
+            'to': to_lang,
+            'appid': APP_ID,
+            'salt': salt,
+            'sign': sign,
+        }
+        response = requests.get(TRANSLATE_API, params=params).json()
+        return response.get('trans_result', [{}])[0].get('dst', line)
+
+    # 按行翻译，并保持换行
+    lines = text.splitlines()
+    translated_lines = [translate_line(line) for line in lines]
+    return '\n'.join(translated_lines)
 
 
 # 从数据库中获取 key
